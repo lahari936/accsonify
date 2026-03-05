@@ -1,5 +1,6 @@
 """
-Improved SVM training script with better feature extraction and analysis
+SVM training script using Whisper embeddings only
+Based on working Colab implementation
 """
 
 import os
@@ -10,11 +11,10 @@ import joblib
 
 import whisper
 import torch
-import librosa
 
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 from sklearn.svm import SVC
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -57,6 +57,14 @@ def map_region(country):
     if c in ["nigeria", "ghana", "kenya", "ethiopia", "south africa",
              "uganda", "tanzania"]:
         return "Africa"
+    
+    # North America (Native English speakers - American accent)
+    if c in ["usa", "united states", "canada"]:
+        return "North_America"
+    
+    # Europe (Native English speakers - British accent)  
+    if c in ["uk", "united kingdom", "england", "scotland", "wales", "ireland"]:
+        return "Europe"
 
     return None
 
@@ -81,7 +89,7 @@ df = df[df["audio_path"].notna()].reset_index(drop=True)
 print(f"Final samples with audio: {len(df)}")
 
 # ============================================================================
-# Load Whisper and extract features
+# Load Whisper and extract embeddings
 # ============================================================================
 
 whisper_model = whisper.load_model("base").to(device)
@@ -102,82 +110,25 @@ def extract_whisper_embedding(audio_path):
         print(f"Error processing {audio_path}: {e}")
         return None
 
-def extract_acoustic_features(audio_path):
-    """Extract handcrafted acoustic features"""
-    try:
-        y, sr = librosa.load(audio_path, sr=16000, mono=True)
-        
-        # Pitch features
-        pitch = librosa.yin(y, fmin=50, fmax=400)
-        pitch_mean = np.nanmean(pitch)
-        pitch_std = np.nanstd(pitch)
-        
-        # Energy features
-        energy = librosa.feature.rms(y=y)[0]
-        energy_mean = np.mean(energy)
-        energy_std = np.std(energy)
-        
-        # MFCC features
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        mfcc_mean = np.mean(mfcc, axis=1)
-        mfcc_std = np.std(mfcc, axis=1)
-        
-        # Spectral features
-        spec_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-        spec_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
-        
-        features = np.concatenate([
-            [pitch_mean, pitch_std, energy_mean, energy_std],
-            mfcc_mean, mfcc_std,
-            [np.mean(spec_centroid), np.mean(spec_rolloff)]
-        ])
-        
-        return features
-    except Exception as e:
-        print(f"Error extracting acoustic features from {audio_path}: {e}")
-        return None
-
 # Extract features
-print("\nExtracting features...")
-X_whisper, X_acoustic, y = [], [], []
+print("\nExtracting Whisper embeddings...")
+X, y = [], []
 
 for _, row in tqdm(df.iterrows(), total=len(df)):
     audio_path = row["audio_path"]
     
-    # Whisper embedding
     emb = extract_whisper_embedding(audio_path)
     if emb is None:
         continue
     
-    # Acoustic features
-    acous = extract_acoustic_features(audio_path)
-    if acous is None:
-        continue
-    
-    X_whisper.append(emb)
-    X_acoustic.append(acous)
+    X.append(emb)
     y.append(row["region"])
 
-X_whisper = np.array(X_whisper)
-X_acoustic = np.array(X_acoustic)
+X = np.array(X)
 y = np.array(y)
 
-print(f"Final dataset: {X_whisper.shape[0]} samples")
-print(f"Whisper embedding shape: {X_whisper.shape}")
-print(f"Acoustic features shape: {X_acoustic.shape}")
-
-# ============================================================================
-# Combine features and normalize
-# ============================================================================
-
-# Normalize acoustic features
-scaler = StandardScaler()
-X_acoustic = scaler.fit_transform(X_acoustic)
-
-# Combine features (Whisper embeddings + acoustic features)
-X = np.concatenate([X_whisper, X_acoustic], axis=1)
-
-print(f"Combined feature shape: {X.shape}")
+print(f"Final dataset: {X.shape[0]} samples")
+print(f"Feature shape: {X.shape}")
 
 # ============================================================================
 # Train/Val Split
@@ -200,10 +151,10 @@ print(f"Validation set: {X_val.shape[0]}")
 print("\nTraining SVM...")
 clf = SVC(
     kernel="rbf",
-    C=100,  # Increased regularization
+    C=10,
     gamma="scale",
     probability=True,
-    class_weight="balanced"  # Handle class imbalance
+    class_weight="balanced"
 )
 
 clf.fit(X_train, y_train)
@@ -228,16 +179,8 @@ print("\nClass Mapping:")
 for i, label in enumerate(le.classes_):
     print(f"  {i} → {label}")
 
-print("\nConfusion Matrix:")
-cm = confusion_matrix(y_val, y_pred)
-print(cm)
-
 print("\nClassification Report:")
 print(classification_report(y_val, y_pred, target_names=le.classes_))
-
-# Cross-validation
-cv_scores = cross_val_score(clf, X, y_enc, cv=5)
-print(f"\n5-Fold CV Score: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
 
 # ============================================================================
 # Save models
@@ -245,9 +188,7 @@ print(f"\n5-Fold CV Score: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
 
 joblib.dump(clf, "svm_model.pkl")
 joblib.dump(le, "label_encoder.pkl")
-joblib.dump(scaler, "acoustic_scaler.pkl")
 
 print("\nModels saved!")
 print("  - svm_model.pkl")
 print("  - label_encoder.pkl")
-print("  - acoustic_scaler.pkl")

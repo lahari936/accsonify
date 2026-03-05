@@ -22,8 +22,15 @@ app.add_middleware(
 
 # Load AI models on startup
 @app.on_event("startup")
-async def startup_event():
-    model_manager.load_models()
+def startup_event():
+    print("Starting up application...")
+    try:
+        model_manager.load_models()
+        print("Models loaded successfully!")
+    except Exception as e:
+        print(f"Error during startup: {e}")
+        import traceback
+        traceback.print_exc()
 
 @app.get("/")
 def read_root():
@@ -43,7 +50,10 @@ async def detect_accent(audio: UploadFile = File(...)):
         
     try:
         region, confidence = model_manager.predict_accent(temp_file_path)
-        return {"region": region, "confidence": round(confidence * 100, 2)}
+        # Map region to accent name
+        from model_utils import region_to_accent
+        accent = region_to_accent.get(region, "american")
+        return {"region": accent, "confidence": round(confidence * 100, 2)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
