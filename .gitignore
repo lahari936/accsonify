@@ -1,1 +1,4 @@
 __pycache__/
+accsonify-backend/outputs/*.mp3
+nul
+**/nul

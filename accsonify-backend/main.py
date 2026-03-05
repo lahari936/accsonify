@@ -119,7 +119,7 @@ async def convert_accent(
         return {
             "text": text,
             "target_accent": target_accent,
-            "audio_url": f"http://127.0.0.1:8000/outputs/{output_filename}",
+            "audio_url": f"/outputs/{output_filename}",
             "details": result
         }
     except Exception as e:
