@@ -20,20 +20,21 @@ try:
     from main import app as app  # type: ignore # noqa: E402,F401
 except Exception as import_error:
     # Fallback backend keeps the deployed app functional on constrained runtimes.
+    fallback_reason = str(import_error)
     app = FastAPI(title="Accsonify Fallback API", version="1.0.0-fallback")
 
     @app.get("/")
     def root():
         return {
             "message": "Fallback backend active",
-            "reason": str(import_error),
+            "reason": fallback_reason,
         }
 
     @app.get("/healthz")
     def healthz():
         return {
             "status": "fallback",
-            "reason": str(import_error),
+            "reason": fallback_reason,
         }
 
     @app.post("/detect-accent")
@@ -66,7 +67,7 @@ except Exception as import_error:
             "audio_url": f"/outputs/{output_filename}",
             "details": {
                 "mode": "fallback",
-                "reason": str(import_error),
+                "reason": fallback_reason,
             },
         }
 
