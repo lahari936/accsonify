@@ -11,6 +11,10 @@ from model_utils import model_manager, convert_accent_tts
 
 app = FastAPI(title="Accsonify API", version="1.0.0")
 
+# Serverless platforms allow writes only in the system temp directory.
+OUTPUTS_DIR = os.path.join(tempfile.gettempdir(), "accsonify_outputs")
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
+
 # Allow CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
@@ -121,9 +125,7 @@ async def convert_accent(
         # OR we can serve it by configuring a static directory
         
         # Let's move the file to a static 'outputs' directory so frontend can access via URL
-        outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-        os.makedirs(outputs_dir, exist_ok=True)
-        final_output_path = os.path.join(outputs_dir, output_filename)
+        final_output_path = os.path.join(OUTPUTS_DIR, output_filename)
         shutil.move(temp_output_path, final_output_path)
         
         return {
@@ -140,10 +142,7 @@ async def convert_accent(
 
 # Serve static files for converted audio
 from fastapi.staticfiles import StaticFiles
-import os
-outputs_dir = os.path.join(os.path.dirname(__file__), "outputs")
-os.makedirs(outputs_dir, exist_ok=True)
-app.mount("/outputs", StaticFiles(directory=outputs_dir), name="outputs")
+app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 if __name__ == "__main__":
     import uvicorn
