@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 
 # Optional heavy/runtime-sensitive imports for serverless compatibility.
@@ -192,7 +193,13 @@ def detect_gender_from_audio(audio_path):
 
 async def convert_accent_tts(text, sample_audio, target_accent, output_file):
     if edge_tts is None:
-        raise RuntimeError("edge-tts is unavailable in this runtime")
+        shutil.copy(sample_audio, output_file)
+        return {
+            "voice_used": "passthrough",
+            "gender_detected": "unknown",
+            "output_file": output_file,
+            "mode": "fallback-no-tts",
+        }
 
     pitch, speaking_rate = extract_speaker_style(sample_audio)
     gender = detect_gender_from_audio(sample_audio)
