@@ -114,7 +114,15 @@ export default function Home() {
       setTranscript(transcribeRes.data.text)
     } catch (error) {
       console.error('Error processing audio:', error)
-      alert("Failed to process audio. Ensure backend is running.")
+      if (axios.isAxiosError(error)) {
+        const detail = error.response?.data?.detail
+        const detailMessage = typeof detail === 'string'
+          ? detail
+          : detail?.message || error.response?.data?.message
+        alert(detailMessage || "Failed to process audio. Ensure backend is running.")
+      } else {
+        alert("Failed to process audio. Ensure backend is running.")
+      }
     } finally {
       setIsProcessing(false)
     }
@@ -134,7 +142,15 @@ export default function Home() {
       setConvertedAudioUrl(toAbsoluteAudioUrl(res.data.audio_url))
     } catch (error) {
       console.error('Conversion failed:', error)
-      alert("Conversion failed.")
+      if (axios.isAxiosError(error)) {
+        const detail = error.response?.data?.detail
+        const detailMessage = typeof detail === 'string'
+          ? detail
+          : detail?.message || error.response?.data?.message
+        alert(detailMessage || "Conversion failed.")
+      } else {
+        alert("Conversion failed.")
+      }
     } finally {
       setIsConverting(false)
     }

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+openai-whisper
+torch
+librosa
+scikit-learn
+joblib
+edge-tts
+numpy
+python-multipart
+httpx

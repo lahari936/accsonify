@@ -1,17 +1,10 @@
 import os
-import shutil
 import sys
-import tempfile
-import uuid
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException
 
 CURRENT_DIR = os.path.dirname(__file__)
 BACKEND_DIR = os.path.abspath(os.path.join(CURRENT_DIR, "..", "accsonify-backend"))
-OUTPUTS_DIR = os.path.join(tempfile.gettempdir(), "accsonify_outputs")
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
-
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
@@ -23,6 +16,16 @@ except Exception as import_error:
     fallback_reason = str(import_error)
     app = FastAPI(title="Accsonify Fallback API", version="1.0.0-fallback")
 
+    def _raise_real_inference_required():
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": "Real ML backend is unavailable on this deployment",
+                "reason": fallback_reason,
+                "action": "Deploy accsonify-backend to a dedicated Python host and set NEXT_PUBLIC_API_BASE_URL to that backend URL",
+            },
+        )
+
     @app.get("/")
     def root():
         return {
@@ -33,42 +36,18 @@ except Exception as import_error:
     @app.get("/healthz")
     def healthz():
         return {
-            "status": "fallback",
+            "status": "degraded",
             "reason": fallback_reason,
         }
 
     @app.post("/detect-accent")
-    async def detect_accent(audio: UploadFile = File(...)):
-        if not audio.filename or not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
-            raise HTTPException(status_code=400, detail="Invalid audio format")
-        return {"region": "american", "confidence": 75.0}
+    async def detect_accent():
+        _raise_real_inference_required()
 
     @app.post("/transcribe")
-    async def transcribe(audio: UploadFile = File(...)):
-        if not audio.filename or not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
-            raise HTTPException(status_code=400, detail="Invalid audio format")
-        return {"text": "Transcription is temporarily unavailable in fallback mode."}
+    async def transcribe():
+        _raise_real_inference_required()
 
     @app.post("/convert-accent")
-    async def convert_accent(audio: UploadFile = File(...), target_accent: str = Form(...)):
-        if not audio.filename or not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
-            raise HTTPException(status_code=400, detail="Invalid audio format")
-
-        ext = os.path.splitext(audio.filename)[1].lower() or ".webm"
-        output_filename = f"{uuid.uuid4()}_converted{ext}"
-        output_path = os.path.join(OUTPUTS_DIR, output_filename)
-
-        with open(output_path, "wb") as buffer:
-            shutil.copyfileobj(audio.file, buffer)
-
-        return {
-            "text": "Fallback mode echo conversion.",
-            "target_accent": target_accent,
-            "audio_url": f"/outputs/{output_filename}",
-            "details": {
-                "mode": "fallback",
-                "reason": fallback_reason,
-            },
-        }
-
-    app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
+    async def convert_accent():
+        _raise_real_inference_required()

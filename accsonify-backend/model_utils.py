@@ -72,6 +72,7 @@ class AccentModelManager:
         self.whisper_model = None
         self.mock_mode_svm = False
         self.mock_mode_whisper = False
+        self.allow_mock_mode = os.getenv("ALLOW_MOCK_MODE", "false").lower() == "true"
 
     def load_models(self):
         """Load models with error handling"""
@@ -106,6 +107,16 @@ class AccentModelManager:
             print("✗ Whisper library not available. Running in MOCK mode for transcription.")
             self.mock_mode_whisper = True
 
+        if (self.mock_mode_svm or self.mock_mode_whisper) and not self.allow_mock_mode:
+            missing = []
+            if self.mock_mode_svm:
+                missing.append("SVM classifier artifacts (svm_model.pkl/label_encoder.pkl) or joblib")
+            if self.mock_mode_whisper:
+                missing.append("Whisper runtime dependencies/model")
+            raise RuntimeError(
+                "Real inference is required but model stack is incomplete: " + ", ".join(missing)
+            )
+
     def extract_whisper_embedding(self, audio_path):
         """Extract Whisper encoder embedding - matches training script exactly"""
         if self.mock_mode_whisper or self.whisper_model is None:
@@ -127,7 +138,8 @@ class AccentModelManager:
     def predict_accent(self, audio_path):
         """Predict accent using ONLY Whisper embeddings - matches training script"""
         if self.mock_mode_svm or self.clf is None:
-            # Mock prediction
+            if not self.allow_mock_mode:
+                raise RuntimeError("Accent model unavailable: real SVM classifier not loaded")
             regions = list(region_to_accent.keys())
             detected = np.random.choice(regions)
             confidence = float(np.random.uniform(0.6, 0.99))
@@ -151,6 +163,8 @@ class AccentModelManager:
 
     def transcribe(self, audio_path):
         if self.mock_mode_whisper or self.whisper_model is None:
+            if not self.allow_mock_mode:
+                raise RuntimeError("Transcription model unavailable: Whisper is not loaded")
             return "This is a mock transcription because Whisper is not loaded."
             
         result = self.whisper_model.transcribe(audio_path)
@@ -193,13 +207,7 @@ def detect_gender_from_audio(audio_path):
 
 async def convert_accent_tts(text, sample_audio, target_accent, output_file):
     if edge_tts is None:
-        shutil.copy(sample_audio, output_file)
-        return {
-            "voice_used": "passthrough",
-            "gender_detected": "unknown",
-            "output_file": output_file,
-            "mode": "fallback-no-tts",
-        }
+        raise RuntimeError("TTS dependency unavailable: edge-tts is not installed")
 
     pitch, speaking_rate = extract_speaker_style(sample_audio)
     gender = detect_gender_from_audio(sample_audio)
