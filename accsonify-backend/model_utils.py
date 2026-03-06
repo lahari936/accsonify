@@ -1,10 +1,26 @@
 import os
-import torch
-import librosa
 import numpy as np
-import edge_tts
-import asyncio
-import joblib
+
+# Optional heavy/runtime-sensitive imports for serverless compatibility.
+try:
+    import torch
+except Exception:
+    torch = None
+
+try:
+    import librosa
+except Exception:
+    librosa = None
+
+try:
+    import edge_tts
+except Exception:
+    edge_tts = None
+
+try:
+    import joblib
+except Exception:
+    joblib = None
 
 # Optional whisper import, handle if not installed yet during dev
 try:
@@ -45,7 +61,9 @@ accent_voice_map = {
 
 class AccentModelManager:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
+        if torch is not None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
         print(f"Using device: {self.device}")
         
         self.clf = None
@@ -56,21 +74,25 @@ class AccentModelManager:
 
     def load_models(self):
         """Load models with error handling"""
+        base_dir = os.path.dirname(__file__)
+        svm_model_path = os.path.join(base_dir, "svm_model.pkl")
+        label_encoder_path = os.path.join(base_dir, "label_encoder.pkl")
+
         # Load SVM
-        if os.path.exists("svm_model.pkl") and os.path.exists("label_encoder.pkl"):
+        if joblib and os.path.exists(svm_model_path) and os.path.exists(label_encoder_path):
             try:
-                self.clf = joblib.load("svm_model.pkl")
-                self.le = joblib.load("label_encoder.pkl")
+                self.clf = joblib.load(svm_model_path)
+                self.le = joblib.load(label_encoder_path)
                 print("✓ Loaded real SVM models.")
             except Exception as e:
                 print(f"✗ Error loading SVM models: {e}. Running in MOCK mode.")
                 self.mock_mode_svm = True
         else:
-            print("✗ SVM models not found. Running in MOCK mode for classification.")
+            print("✗ SVM models or joblib not available. Running in MOCK mode for classification.")
             self.mock_mode_svm = True
 
         # Load Whisper
-        if whisper:
+        if whisper and torch is not None:
             try:
                 print("Loading Whisper base model...")
                 self.whisper_model = whisper.load_model("base", device=self.device)
@@ -135,6 +157,9 @@ class AccentModelManager:
 
 
 def extract_speaker_style(audio_path):
+    if librosa is None:
+        return 150.0, 1.5
+
     try:
         y, sr = librosa.load(audio_path, sr=16000, mono=True)
         pitch_values = librosa.yin(y, fmin=50, fmax=300)
@@ -151,6 +176,9 @@ def extract_speaker_style(audio_path):
         return 150.0, 1.5
 
 def detect_gender_from_audio(audio_path):
+    if librosa is None:
+        return "male"
+
     try:
         y, sr = librosa.load(audio_path, sr=16000, mono=True)
         pitch_values = librosa.yin(y, fmin=50, fmax=300)
@@ -163,6 +191,9 @@ def detect_gender_from_audio(audio_path):
         return "male"
 
 async def convert_accent_tts(text, sample_audio, target_accent, output_file):
+    if edge_tts is None:
+        raise RuntimeError("edge-tts is unavailable in this runtime")
+
     pitch, speaking_rate = extract_speaker_style(sample_audio)
     gender = detect_gender_from_audio(sample_audio)
 

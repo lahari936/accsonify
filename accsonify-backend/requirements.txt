@@ -1,8 +1,5 @@
 fastapi
 uvicorn
-openai-whisper
-torch
-librosa
 scikit-learn
 joblib
 edge-tts
