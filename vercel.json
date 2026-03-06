@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "accsonify-frontend/package.json",
+      "use": "@vercel/next"
+    },
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(detect-accent|transcribe|convert-accent)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/healthz",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/outputs/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/",
+      "dest": "accsonify-frontend/"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "accsonify-frontend/$1"
+    }
+  ]
+}

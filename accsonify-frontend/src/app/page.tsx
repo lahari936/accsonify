@@ -6,15 +6,19 @@ import { Mic, Square, Play, Download, Languages, Sparkles, RefreshCw } from 'luc
 import { motion, AnimatePresence } from 'framer-motion'
 import AudioVisualizer from '@/components/AudioVisualizer'
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || '').replace(/\/$/, '')
 
-const toApiUrl = (path: string) => `${API_BASE}${path}`
+const toApiUrl = (path: string) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${API_BASE}${normalizedPath}`
+}
 
 const toAbsoluteAudioUrl = (audioUrl: string) => {
   if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) {
     return audioUrl
   }
-  return `${API_BASE}${audioUrl.startsWith('/') ? '' : '/'}${audioUrl}`
+  const normalizedPath = audioUrl.startsWith('/') ? audioUrl : `/${audioUrl}`
+  return `${API_BASE}${normalizedPath}`
 }
 
 type DetectedAccent = {

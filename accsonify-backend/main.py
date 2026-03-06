@@ -20,24 +20,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load AI models on startup
-@app.on_event("startup")
-def startup_event():
-    print("Starting up application...")
+MODELS_LOADED = False
+
+
+def ensure_models_loaded():
+    global MODELS_LOADED
+    if MODELS_LOADED:
+        return
+
     try:
         model_manager.load_models()
-        print("Models loaded successfully!")
+        MODELS_LOADED = True
     except Exception as e:
-        print(f"Error during startup: {e}")
-        import traceback
-        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Model initialization failed: {e}")
 
 @app.get("/")
 def read_root():
     return {"message": "Welcome to Accsonify API"}
 
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
 @app.post("/detect-accent")
 async def detect_accent(audio: UploadFile = File(...)):
+    ensure_models_loaded()
     if not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
          raise HTTPException(status_code=400, detail="Invalid audio format")
          
@@ -63,6 +71,7 @@ async def detect_accent(audio: UploadFile = File(...)):
 
 @app.post("/transcribe")
 async def transcribe(audio: UploadFile = File(...)):
+    ensure_models_loaded()
     if not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
          raise HTTPException(status_code=400, detail="Invalid audio format")
          
@@ -86,6 +95,7 @@ async def convert_accent(
     audio: UploadFile = File(...), 
     target_accent: str = Form(...)
 ):
+    ensure_models_loaded()
     if not audio.filename.endswith((".wav", ".webm", ".m4a", ".mp3", ".ogg")):
          raise HTTPException(status_code=400, detail="Invalid audio format")
          
