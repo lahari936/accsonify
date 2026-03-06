@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: accsonify-backend
+    runtime: docker
+    repo: https://github.com/lahari936/accsonify
+    rootDir: accsonify-backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: ALLOW_MOCK_MODE
+        value: "false"
+      - key: FRONTEND_ORIGIN
+        value: https://accsonify-gukw.vercel.app

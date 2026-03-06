@@ -10,28 +10,49 @@ Place these files in `accsonify-backend/` before deployment:
 
 If missing, API startup will fail by design (`ALLOW_MOCK_MODE=false`) to prevent wrong predictions.
 
-## 2. Deploy backend (Render/Railway)
-Create a new **Web Service** from `accsonify-backend/` using Docker.
+## 2. Quick local validation with Docker
+Run these from repository root (`Implementation`):
 
-- Runtime: Docker
-- Dockerfile path: `accsonify-backend/Dockerfile`
-- Health check path: `/healthz`
+```bash
+docker build -t accsonify-backend-ml ./accsonify-backend
+docker run --rm -p 8000:8000 \
+	-e ALLOW_MOCK_MODE=false \
+	-e FRONTEND_ORIGIN=http://localhost:3000 \
+	accsonify-backend-ml
+```
 
-Environment variables:
+Then test:
+
+```bash
+curl http://127.0.0.1:8000/healthz
+```
+
+If models/dependencies are correct, you should get `{"status":"ok"}`.
+
+## 3. Deploy backend on Render (real inference)
+Use one of these options:
+
+- Option A: `New +` -> `Blueprint` -> select this repository and use `render.yaml` from repo root.
+- Option B: `New +` -> `Web Service` -> Docker with:
+	- Root Directory: `accsonify-backend`
+	- Dockerfile Path: `accsonify-backend/Dockerfile`
+	- Health Check Path: `/healthz`
+
+Required environment variables:
 
 - `ALLOW_MOCK_MODE=false`
 - `FRONTEND_ORIGIN=https://<your-vercel-domain>`
 
-## 3. Point Vercel frontend to backend
+## 4. Point Vercel frontend to backend
 In Vercel Project Settings -> Environment Variables:
 
 - `NEXT_PUBLIC_API_BASE_URL=https://<your-backend-domain>`
 
 Redeploy frontend.
 
-## 4. Verify
+## 5. Verify
 - `GET https://<backend-domain>/healthz` should return `{"status":"ok"}`
 - Run one sample through `/detect-accent` and ensure non-random output
 
-## 5. Train models if needed
+## 6. Train models if needed
 If `svm_model.pkl` and `label_encoder.pkl` do not exist, run training locally with your dataset and copy artifacts into `accsonify-backend/` before deploy.

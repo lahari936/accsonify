@@ -15,11 +15,15 @@ app = FastAPI(title="Accsonify API", version="1.0.0")
 OUTPUTS_DIR = os.path.join(tempfile.gettempdir(), "accsonify_outputs")
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 
-# Allow CORS for Next.js frontend
+# Allow CORS for frontend(s) configured via env var.
+# Example: FRONTEND_ORIGIN=https://your-app.vercel.app
+frontend_origins = os.getenv("FRONTEND_ORIGIN", "*")
+allow_origins = [origin.strip() for origin in frontend_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For dev only, restrict in prod
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,6 +49,7 @@ def read_root():
 
 @app.get("/healthz")
 def healthz():
+    ensure_models_loaded()
     return {"status": "ok"}
 
 @app.post("/detect-accent")
