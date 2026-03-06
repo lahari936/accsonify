@@ -3,3 +3,13 @@ name = "accsonify-vercel-api"
 version = "0.1.0"
 description = "Vercel Python runtime metadata for Accsonify backend"
 requires-python = ">=3.12"
+dependencies = [
+	"fastapi",
+	"uvicorn",
+	"numpy",
+	"scikit-learn",
+	"joblib",
+	"edge-tts",
+	"python-multipart",
+	"httpx"
+]
