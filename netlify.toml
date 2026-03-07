@@ -1,0 +1,3 @@
+[build]
+  command = "npm --prefix accsonify-frontend run build"
+  publish = "accsonify-frontend/out"
