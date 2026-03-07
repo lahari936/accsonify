@@ -1,0 +1,6 @@
+[build]
+  base = "accsonify-frontend"
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
