@@ -24,13 +24,6 @@
       "dest": "api/index.py"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/",
-      "dest": "accsonify-frontend/"
-    },
-    {
       "src": "/(.*)",
       "dest": "accsonify-frontend/$1"
     }

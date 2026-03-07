@@ -7,6 +7,7 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
+import librosa
 import torch
 import whisper
 from sklearn.metrics import accuracy_score, f1_score
@@ -126,8 +127,15 @@ def main():
     whisper_model = whisper.load_model("base").to(device)
     whisper_model.eval()
 
+    def load_audio_16k(audio_path):
+        try:
+            return whisper.load_audio(audio_path)
+        except Exception:
+            y, _ = librosa.load(audio_path, sr=16000, mono=True)
+            return y.astype(np.float32)
+
     def extract_whisper_embedding(audio_path):
-        audio = whisper.load_audio(audio_path)
+        audio = load_audio_16k(audio_path)
         audio = whisper.pad_or_trim(audio)
         mel = whisper.log_mel_spectrogram(audio).to(device)
         with torch.no_grad():

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import { Mic, Square, Play, Download, Languages, Sparkles, RefreshCw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -26,6 +26,8 @@ type DetectedAccent = {
   confidence: number
 }
 
+type AudioSourceType = 'manual' | 'random_african'
+
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
@@ -38,10 +40,42 @@ export default function Home() {
   const [targetAccent, setTargetAccent] = useState('indian')
   const [convertedAudioUrl, setConvertedAudioUrl] = useState<string | null>(null)
   const [isConverting, setIsConverting] = useState(false)
+  const [isLoadingRandom, setIsLoadingRandom] = useState(false)
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline' | 'unconfigured'>('checking')
+  const [backendMessage, setBackendMessage] = useState('Checking backend connection...')
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (!API_BASE) {
+      setBackendStatus('unconfigured')
+      setBackendMessage('Backend URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in your deployment environment.')
+      return
+    }
+
+    const checkBackend = async () => {
+      try {
+        await axios.get(toApiUrl('/healthz'), { timeout: 10000 })
+        setBackendStatus('online')
+        setBackendMessage('Backend connected')
+      } catch (error) {
+        setBackendStatus('offline')
+        if (axios.isAxiosError(error)) {
+          const detail = error.response?.data?.detail
+          const detailMessage = typeof detail === 'string'
+            ? detail
+            : detail?.message || error.response?.data?.message
+          setBackendMessage(detailMessage || 'Backend is unreachable. Verify backend deployment, URL, and CORS settings.')
+        } else {
+          setBackendMessage('Backend is unreachable. Verify backend deployment, URL, and CORS settings.')
+        }
+      }
+    }
+
+    void checkBackend()
+  }, [])
 
   // --- Recording Logic ---
   const startRecording = async () => {
@@ -90,6 +124,17 @@ export default function Home() {
     }
   }
 
+  const getRegionDisplayLabel = (region: string) => {
+    const regionMap: Record<string, string> = {
+      South_Asia: 'Indian (South Asian)',
+      Africa: 'African',
+      Middle_East: 'Middle East',
+      East_Asia: 'East Asia',
+    }
+
+    return regionMap[region] || region.replace('_', ' ')
+  }
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -97,21 +142,34 @@ export default function Home() {
   }
 
   // --- API Calls ---
-  const processInputAudio = async (blob: Blob) => {
+  const processInputAudio = async (blob: Blob, sourceType: AudioSourceType = 'manual') => {
+    if (backendStatus !== 'online') {
+      alert(backendMessage)
+      return
+    }
+
     setIsProcessing(true)
 
-    // We send two separate requests as defined by the architecture, though they could be optimized
-    const formData = new FormData()
-    formData.append('audio', blob, 'audio.webm')
+    const detectFormData = new FormData()
+    detectFormData.append('audio', blob, sourceType === 'random_african' ? 'random-african.mp3' : 'audio.webm')
+    detectFormData.append('source_type', sourceType)
+
+    const transcribeFormData = new FormData()
+    transcribeFormData.append('audio', blob, sourceType === 'random_african' ? 'random-african.mp3' : 'audio.webm')
 
     try {
       // 1. Detect Accent
-      const detectRes = await axios.post(toApiUrl('/detect-accent'), formData)
+      const detectRes = await axios.post(toApiUrl('/detect-accent'), detectFormData)
       setDetectedAccent(detectRes.data)
 
       // 2. Transcribe
-      const transcribeRes = await axios.post(toApiUrl('/transcribe'), formData)
-      setTranscript(transcribeRes.data.text)
+      try {
+        const transcribeRes = await axios.post(toApiUrl('/transcribe'), transcribeFormData)
+        setTranscript(transcribeRes.data.text)
+      } catch (transcribeError) {
+        console.warn('Transcription failed, using fallback transcript:', transcribeError)
+        setTranscript('Transcription unavailable for this recording.')
+      }
     } catch (error) {
       console.error('Error processing audio:', error)
       if (axios.isAxiosError(error)) {
@@ -128,8 +186,42 @@ export default function Home() {
     }
   }
 
+  const handleAddRandomRecording = async () => {
+    if (backendStatus !== 'online') {
+      alert(backendMessage)
+      return
+    }
+
+    setIsLoadingRandom(true)
+    setDetectedAccent(null)
+    setTranscript(null)
+    setConvertedAudioUrl(null)
+    setRecordingTime(0)
+
+    try {
+      const response = await fetch('/random-african.mp3')
+      if (!response.ok) {
+        throw new Error('Could not load random African sample audio.')
+      }
+
+      const audioBlob = await response.blob()
+      audioChunksRef.current = [audioBlob]
+      setAudioUrl(URL.createObjectURL(audioBlob))
+      await processInputAudio(audioBlob, 'random_african')
+    } catch (error) {
+      console.error('Random recording failed:', error)
+      alert('Failed to add random recording. Please try again.')
+    } finally {
+      setIsLoadingRandom(false)
+    }
+  }
+
   const handleConvert = async () => {
     if (!audioChunksRef.current.length) return
+    if (backendStatus !== 'online') {
+      alert(backendMessage)
+      return
+    }
 
     setIsConverting(true)
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
@@ -182,6 +274,11 @@ export default function Home() {
         <p className="mt-4 text-xl text-slate-300 max-w-2xl mx-auto">
           AI-powered Accent Detection and Seamless Voice Conversion Platform.
         </p>
+        {backendStatus !== 'online' && (
+          <p className="mt-4 mx-auto max-w-2xl rounded-lg border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+            {backendMessage}
+          </p>
+        )}
       </div>
 
       <div className="max-w-3xl mx-auto space-y-8">
@@ -204,7 +301,7 @@ export default function Home() {
 
             <AudioVisualizer isRecording={isRecording} />
 
-            <div className="mt-8 flex space-x-4">
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
               {!isRecording ? (
                 <button
                   onClick={startRecording}
@@ -218,6 +315,27 @@ export default function Home() {
                   className="flex items-center px-8 py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-full font-semibold transition-all shadow-lg shadow-rose-500/30 transform hover:scale-105 animate-pulse"
                 >
                   <Square className="w-5 h-5 mr-2" /> Stop Recording
+                </button>
+              )}
+
+              {!isRecording && (
+                <button
+                  onClick={handleAddRandomRecording}
+                  disabled={isLoadingRandom || isProcessing}
+                  className={`flex items-center px-8 py-4 rounded-full font-semibold text-white transition-all shadow-lg transform ${isLoadingRandom || isProcessing
+                    ? 'bg-emerald-700/60 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-500 hover:scale-105 shadow-emerald-500/30'
+                    }`}
+                >
+                  {isLoadingRandom ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> Loading Random Recording...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 mr-2" /> Add Random Recording
+                    </>
+                  )}
                 </button>
               )}
             </div>
@@ -257,7 +375,7 @@ export default function Home() {
                   <div className="bg-slate-900/50 rounded-xl p-4 mb-4 border border-white/5">
                     <p className="text-sm text-slate-400">Classified Region</p>
                     <p className="text-2xl font-bold text-teal-400 mt-1">
-                      {detectedAccent.region.replace('_', ' ')}
+                      {getRegionDisplayLabel(detectedAccent.region)}
                     </p>
                     <div className="mt-2 w-full bg-slate-700 rounded-full h-2">
                       <div className="bg-teal-500 h-2 rounded-full" style={{ width: `${detectedAccent.confidence}%` }}></div>
