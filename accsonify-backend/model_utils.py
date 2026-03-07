@@ -125,7 +125,7 @@ class AccentModelManager:
             return np.random.rand(512)
         
         try:
-            audio = whisper.load_audio(audio_path)
+            audio = load_audio_16k(audio_path)
             audio = whisper.pad_or_trim(audio)
             mel = whisper.log_mel_spectrogram(audio).to(self.device)
 
@@ -142,9 +142,11 @@ class AccentModelManager:
         if self.mock_mode_svm or self.clf is None:
             if not self.allow_mock_mode:
                 raise RuntimeError("Accent model unavailable: real SVM classifier not loaded")
-            regions = ["South_Asia", "East_Asia", "Middle_East", "Africa"]
-            detected = np.random.choice(regions)
-            confidence = float(np.random.uniform(0.6, 0.99))
+            # Keep fallback deterministic for local/demo use.
+            detected = os.getenv("DEFAULT_MOCK_REGION", "South_Asia")
+            if detected not in region_to_accent:
+                detected = "South_Asia"
+            confidence = 0.99
             return detected, confidence
 
         embedding = self.extract_whisper_embedding(audio_path)
@@ -166,7 +168,12 @@ class AccentModelManager:
             return "This is a mock transcription because Whisper is not loaded."
 
         try:
-            result = self.whisper_model.transcribe(audio_path)
+            audio_input = audio_path
+            # Avoid path-based transcription when ffmpeg is missing.
+            if shutil.which("ffmpeg") is None and librosa is not None:
+                audio_input = load_audio_16k(audio_path)
+
+            result = self.whisper_model.transcribe(audio_input)
             return result["text"]
         except Exception as e:
             # If runtime decoding fails (commonly missing ffmpeg), fail soft in mock mode.
@@ -174,6 +181,21 @@ class AccentModelManager:
                 print(f"Transcription failed, returning mock text: {e}")
                 return "This is a mock transcription because Whisper could not transcribe the audio."
             raise
+
+
+def load_audio_16k(audio_path):
+    """Load mono 16k audio with whisper loader first, librosa fallback otherwise."""
+    if whisper is not None:
+        try:
+            return whisper.load_audio(audio_path)
+        except Exception:
+            pass
+
+    if librosa is not None:
+        y, _ = librosa.load(audio_path, sr=16000, mono=True)
+        return y.astype(np.float32)
+
+    raise RuntimeError("No audio loader available. Install ffmpeg or librosa.")
 
 
 def extract_speaker_style(audio_path):
