@@ -1,4 +1,5 @@
 import os
+import shutil
 import numpy as np
 
 # Optional heavy/runtime-sensitive imports for serverless compatibility.
@@ -88,16 +89,22 @@ class AccentModelManager:
             print("✗ SVM models or joblib not available. Running in MOCK mode for classification.")
             self.mock_mode_svm = True
 
-        # Load Whisper
+        # Load Whisper only when ffmpeg is available; Whisper audio decoding depends on it.
+        ffmpeg_available = shutil.which("ffmpeg") is not None
+        if not ffmpeg_available:
+            print("✗ ffmpeg is not available. Running in MOCK mode for transcription.")
+            self.mock_mode_whisper = True
+
         if whisper and torch is not None:
-            try:
-                print("Loading Whisper base model...")
-                self.whisper_model = whisper.load_model("base", device=self.device)
-                self.whisper_model.eval()
-                print("✓ Loaded Whisper model.")
-            except Exception as e:
-                print(f"✗ Error loading Whisper model: {e}. Running in MOCK mode.")
-                self.mock_mode_whisper = True
+            if not self.mock_mode_whisper:
+                try:
+                    print("Loading Whisper base model...")
+                    self.whisper_model = whisper.load_model("base", device=self.device)
+                    self.whisper_model.eval()
+                    print("✓ Loaded Whisper model.")
+                except Exception as e:
+                    print(f"✗ Error loading Whisper model: {e}. Running in MOCK mode.")
+                    self.mock_mode_whisper = True
         else:
             print("✗ Whisper library not available. Running in MOCK mode for transcription.")
             self.mock_mode_whisper = True
@@ -157,9 +164,16 @@ class AccentModelManager:
             if not self.allow_mock_mode:
                 raise RuntimeError("Transcription model unavailable: Whisper is not loaded")
             return "This is a mock transcription because Whisper is not loaded."
-            
-        result = self.whisper_model.transcribe(audio_path)
-        return result["text"]
+
+        try:
+            result = self.whisper_model.transcribe(audio_path)
+            return result["text"]
+        except Exception as e:
+            # If runtime decoding fails (commonly missing ffmpeg), fail soft in mock mode.
+            if self.allow_mock_mode:
+                print(f"Transcription failed, returning mock text: {e}")
+                return "This is a mock transcription because Whisper could not transcribe the audio."
+            raise
 
 
 def extract_speaker_style(audio_path):
