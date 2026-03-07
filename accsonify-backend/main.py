@@ -67,10 +67,13 @@ async def detect_accent(audio: UploadFile = File(...)):
         
     try:
         region, confidence = model_manager.predict_accent(temp_file_path)
-        # Map region to accent name
         from model_utils import region_to_accent
         accent = region_to_accent.get(region, "american")
-        return {"region": accent, "confidence": round(confidence * 100, 2)}
+        return {
+            "region": region,
+            "mapped_accent": accent,
+            "confidence": round(confidence * 100, 2),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

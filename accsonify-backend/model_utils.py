@@ -1,5 +1,4 @@
 import os
-import shutil
 import numpy as np
 
 # Optional heavy/runtime-sensitive imports for serverless compatibility.
@@ -29,16 +28,12 @@ try:
 except ImportError:
     whisper = None
 
-# ACCENT MAP
-# Maps detected geographic regions to accent categories for TTS
-# Note: Model detects speaker's origin region, we map to closest available TTS accent
+# Accent map exactly matching the provided ML pipeline.
 region_to_accent = {
-    "South_Asia": "indian",      # Indian subcontinent speakers
-    "East_Asia": "british",      # East Asian English speakers (closest to British RP)
-    "Middle_East": "british",    # Middle Eastern English speakers
-    "Africa": "african",         # African English speakers
-    "North_America": "american", # Native American English speakers
-    "Europe": "british"          # Native British English speakers
+    "South_Asia": "indian",
+    "Middle_East": "british",
+    "Africa": "australian",
+    "East_Asia": "american",
 }
 
 accent_voice_map = {
@@ -54,9 +49,9 @@ accent_voice_map = {
         "male": "en-US-GuyNeural",
         "female": "en-US-JennyNeural"
     },
-    "african": {
-        "male": "en-NG-AbeoNeural",
-        "female": "en-NG-ChimaNeNeural"
+    "australian": {
+        "male": "en-AU-WilliamNeural",
+        "female": "en-AU-NatashaNeural"
     }
 }
 
@@ -118,7 +113,7 @@ class AccentModelManager:
             )
 
     def extract_whisper_embedding(self, audio_path):
-        """Extract Whisper encoder embedding - matches training script exactly"""
+        """Extract Whisper encoder embedding exactly as in training."""
         if self.mock_mode_whisper or self.whisper_model is None:
             return np.random.rand(512)
         
@@ -136,22 +131,18 @@ class AccentModelManager:
             return np.random.rand(512)
 
     def predict_accent(self, audio_path):
-        """Predict accent using ONLY Whisper embeddings - matches training script"""
+        """Predict region using only Whisper encoder embeddings."""
         if self.mock_mode_svm or self.clf is None:
             if not self.allow_mock_mode:
                 raise RuntimeError("Accent model unavailable: real SVM classifier not loaded")
-            regions = list(region_to_accent.keys())
+            regions = ["South_Asia", "East_Asia", "Middle_East", "Africa"]
             detected = np.random.choice(regions)
             confidence = float(np.random.uniform(0.6, 0.99))
             return detected, confidence
 
-        # Extract Whisper embedding ONLY (no acoustic features)
         embedding = self.extract_whisper_embedding(audio_path)
-        
-        # Predict using the embedding
         pred = self.clf.predict([embedding])
-        
-        # Get probabilities for confidence
+
         try:
             probs = self.clf.predict_proba([embedding])[0]
             confidence = float(np.max(probs))
@@ -180,7 +171,7 @@ def extract_speaker_style(audio_path):
         pitch_values = librosa.yin(y, fmin=50, fmax=300)
         avg_pitch = np.nanmean(pitch_values)
         if np.isnan(avg_pitch):
-            avg_pitch = 150 # fallback
+            avg_pitch = 150
 
         frame_energy = librosa.feature.rms(y=y)[0]
         speaking_rate = np.mean(frame_energy) * 1000
@@ -199,7 +190,7 @@ def detect_gender_from_audio(audio_path):
         pitch_values = librosa.yin(y, fmin=50, fmax=300)
         pitch = np.nanmean(pitch_values)
         if np.isnan(pitch):
-            return "male" # fallback
+            return "male"
         return "female" if pitch > 165 else "male"
     except Exception as e:
         print(f"Error detecting gender: {e}")
@@ -212,7 +203,6 @@ async def convert_accent_tts(text, sample_audio, target_accent, output_file):
     pitch, speaking_rate = extract_speaker_style(sample_audio)
     gender = detect_gender_from_audio(sample_audio)
 
-    # Fallback to american if target_accent is unknown
     if target_accent not in accent_voice_map:
         target_accent = "american"
         

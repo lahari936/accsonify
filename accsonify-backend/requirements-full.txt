@@ -7,5 +7,7 @@ scikit-learn
 joblib
 edge-tts
 numpy
+pandas
+tqdm
 python-multipart
 httpx

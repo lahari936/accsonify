@@ -10,6 +10,19 @@ Place these files in `accsonify-backend/` before deployment:
 
 If missing, API startup will fail by design (`ALLOW_MOCK_MODE=false`) to prevent wrong predictions.
 
+### Train artifacts using the exact Whisper+SVM pipeline
+
+Run this from repository root after your dataset is fully downloaded/extracted:
+
+```bash
+python accsonify-backend/train_improved_model.py --base-path "C:/path/to/speech-accent-archive"
+```
+
+Expected dataset structure:
+
+- `<base>/speakers_all.csv`
+- `<base>/recordings/recordings/*.mp3`
+
 ## 2. Quick local validation with Docker
 Run these from repository root (`Implementation`):
 
